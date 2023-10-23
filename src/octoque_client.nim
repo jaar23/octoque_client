@@ -64,13 +64,14 @@ type
     data*: string
 
 
-proc newOtqClient(hostname: string, port: Port, protocol: Protocol): ref OtqClient =
+proc newOtqClient*(hostname: string, port: Port, protocol: Protocol): ref OtqClient =
   var otqclient = (ref OtqClient)(hostname: hostname, port: port, protocol: protocol)
   return otqclient
 
 
 proc readEOR(client: ref OtqClient):Future[void] {.async.} =
   while true:
+    echo "reading util EOR"
     let resp = await client.connection.recvLine()
     if resp == EOR: break
 
@@ -132,26 +133,32 @@ proc put*(client: ref OtqClient, topic: string, payloadRows: uint8,
     return
   let command = if not sentAck: Command.PUT else: Command.PUTACK
   let otqcommand = &"{client.protocol} {command} {topic} {payloadRows} {transferMethod}{NL}"
-  #echo otqcommand
+  echo otqcommand
   await client.connection.send(otqcommand)
   var resp = await client.connection.recvLine()
-  #echo "resp: " & resp
+  echo "resp: " & resp
   if resp.strip() == PROCEED:
-    for d in data: await client.connection.send(d & NL)
+    for d in data: 
+      echo "sending data"
+      await client.connection.send(d & NL)
+      echo "wait for EOR"
     await client.readEOR()
+    echo EOR
   else: echo exception(resp)
 
 
 proc get*(client: ref OtqClient, topic: string, numberOfMsgs: uint8 = 1,
     transferMethod: TransferMethod = BATCH): Future[seq[string]] {.async.} =
   result = newSeq[string]()
-  let otqcommand = &"{client.protocol} {Command.GET} {topic} {numberOfMsgs} {transferMethod}{NL}"
+  let otqcommand = &"{client.protocol} {GET} {topic} {numberOfMsgs} {transferMethod}{NL}"
   await client.connection.send(otqcommand)
   var resp = await client.connection.recvLine()
   if resp.strip() == PROCEED:
     while true:
       var data = await client.connection.recvLine()
-      if data == EOR: break
+      if data == EOR: 
+        echo "get is read-ed EOR"
+        break
       else: result.add(data)
 
 
@@ -161,7 +168,7 @@ proc publish*(client: ref OtqClient, topics: seq[string], payloadRows: uint8,
               data: seq[string], transferMethod: TransferMethod = BATCH): Future[void] {.async.} =
   for topic in topics:
     await client.put(topic, payloadRows, data, transferMethod)
-    echo "sent to {topic}"
+    echo &"sent to {topic}"
 
 
 proc subscribe*(client: ref OtqClient, topic: string, 
@@ -169,9 +176,19 @@ proc subscribe*(client: ref OtqClient, topic: string,
   let otqcommand = &"{client.protocol} {SUBSCRIBE} {topic}{NL}"
   var unsubscribe = false
   await client.connection.send(otqcommand)
+  echo "subscribing"
   while not unsubscribe:
+    echo "waiting from producer"
     let resp = await client.connection.recvLine()
-    cb(resp, unsubscribe)
+    echo "got something back..."
+    echo "|" & resp & "|"
+    if resp.strip().len > 0:
+      if resp == PROCEED:
+        continue
+      else:
+        cb(resp, unsubscribe) 
+    else:
+      await client.connection.send("ACKNOWLEDGE\n")
     if unsubscribe:
       await client.readEOR()
       break

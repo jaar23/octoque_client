@@ -10,18 +10,39 @@ from net import Port
 import octoque_client
 import asyncdispatch, os
 
-var client = (ref OtqClient)(hostname: "localhost", port: Port(6789))
+var client = newOtqClient("localhost", Port(6789), OTQ)
 let isConnected = client.connect("yj", "password").waitFor()
 echo "is connected? " & $isConnected
 
 test "put 1 message":
   var data = ""
-  for i in 0..<100_000:
+  for i in 0..<100:
     data &= $i
-  echo "data size: " & $data.len
-  sleep(2000)
+  #echo "data size: " & $data.len
   client.put("default", 1, @[data]).waitFor()
+  sleep(1000)
 
 test "get 1 message":
   let resp = client.get("default", 2).waitFor()
-  echo  $resp
+  #echo  $resp
+  sleep(1000)
+
+
+
+test "publish message":
+  var msgs = newSeq[string]()
+  for m in 0..<5:
+    var data = ""
+    for i in 0..<100:
+      data &= $i
+    msgs.add(data)
+  client.publish(@["pubsub"], msgs.len.uint8(), msgs).waitFor()
+  sleep(1000)
+
+test "subscribe message":
+  proc sub(data: string, dc: bool) =
+    echo "inside callback"
+    echo data
+
+  client.subscribe("pubsub", sub).waitFor()
+
