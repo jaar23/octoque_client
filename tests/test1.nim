@@ -10,7 +10,7 @@ from net import Port
 import octoque_client
 import asyncdispatch, os
 
-var client = newOtqClient("localhost", Port(6789), OTQ)
+var client = newOtqClient("localhost", Port(6789), OTQ, BROKER)
 let isConnected = client.connect("yj", "password").waitFor()
 echo "is connected? " & $isConnected
 
@@ -40,9 +40,12 @@ test "publish message":
   sleep(1000)
 
 test "subscribe message":
+  var client2 = newOtqClient("localhost", Port(6789), OTQ, PUBSUB)
+  discard client2.connect("yj", "password").waitFor()
   proc sub(data: string, dc: bool) =
     echo "inside callback"
+    client.put("pubsub", 1, @[data]).waitFor()
     echo data
 
-  client.subscribe("pubsub", sub).waitFor()
+  client2.subscribe("pubsub", sub).waitFor()
 

@@ -16,6 +16,8 @@ type
   Error = enum
     SERVER_ERROR,
     CLIENT_ERROR
+  
+  ConnTypeError = object of CatchableError
 
   Command* = enum
     GET = "GET"
@@ -50,6 +52,7 @@ type
     hostname*: string
     port*: Port
     protocol: Protocol
+    connectionType: ConnectionType
     connection: AsyncSocket
     connected = false
 
@@ -64,8 +67,8 @@ type
     data*: string
 
 
-proc newOtqClient*(hostname: string, port: Port, protocol: Protocol): ref OtqClient =
-  var otqclient = (ref OtqClient)(hostname: hostname, port: port, protocol: protocol)
+proc newOtqClient*(hostname: string, port: Port, protocol: Protocol, connectionType: ConnectionType): ref OtqClient =
+  var otqclient = (ref OtqClient)(hostname: hostname, port: port, protocol: protocol, connectionType: connectionType)
   return otqclient
 
 
@@ -173,25 +176,33 @@ proc publish*(client: ref OtqClient, topics: seq[string], payloadRows: uint8,
 
 proc subscribe*(client: ref OtqClient, topic: string, 
                 cb: (data: string, unsubscribe: bool) -> void): Future[void] {.async.} =
-  let otqcommand = &"{client.protocol} {SUBSCRIBE} {topic}{NL}"
-  var unsubscribe = false
-  await client.connection.send(otqcommand)
-  echo "subscribing"
-  while not unsubscribe:
-    echo "waiting from producer"
-    let resp = await client.connection.recvLine()
-    echo "got something back..."
-    echo "|" & resp & "|"
-    if resp.strip().len > 0:
-      if resp == PROCEED:
-        continue
+  try:
+    echo "conn type: " & $client.connectionType
+    if client.connectionType != PUBSUB:
+      raise newException(ConnTypeError, "client connection type is invalid, only PUBSUB client can subscribe to topic")
+    let otqcommand = &"{client.protocol} {SUBSCRIBE} {topic}{NL}"
+    var unsubscribe = false
+    await client.connection.send(otqcommand)
+    echo "subscribing"
+    while not unsubscribe:
+      echo "waiting from producer"
+      let resp = await client.connection.recvLine()
+      echo "got something back..."
+      echo "|" & resp & "|"
+      if resp.strip().len > 0:
+        if resp == PROCEED:
+          continue
+        else:
+          cb(resp, unsubscribe) 
       else:
-        cb(resp, unsubscribe) 
-    else:
-      await client.connection.send("ACKNOWLEDGE\n")
-    if unsubscribe:
-      await client.readEOR()
-      break
+        await client.connection.send("ACKNOWLEDGE\n")
+      if unsubscribe:
+        await client.readEOR()
+        break
+  except ConnTypeError as cerr:
+    raise newException(ConnTypeError, cerr.msg)
+  except:
+    raise newException(CatchableError, getCurrentExceptionMsg())
 
 
 proc unsubscribe*(client: ref OtqClient, topic: string): Future[void] {.async.} =
