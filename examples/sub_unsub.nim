@@ -1,10 +1,3 @@
-## octoque client lib
-
-working in progress...
-
-### quick example
-
-```nim
 import octoque_client, asyncdispatch
 import random, os
 
@@ -21,13 +14,14 @@ proc listen() {.async.} =
   await otqclient.subscribe("pubsub", echoMsg)
  
 proc main() {.async.} =
-  await otqclient.put("pubsub", 2, @[rndStr(), rndStr()])
+  await otqclient.put("pubsub", 5, @[rndStr(), rndStr(), rndStr(), rndStr(), rndStr()])
   asyncCheck listen()
-  while true:
-    sleep(5000)
-    echo "put new message..."
-    await otqclient.put("pubsub", 1, @[rndStr()])
+  #sleep(10000)
+  await otqclient.put("pubsub", 5, @[rndStr(), rndStr(), rndStr(), rndStr(), rndStr()])
+  echo "unsubscribe..."
+  await otqclient.unsubscribe("pubsub")
+
 
 when isMainModule:
   asyncCheck main()
-```
+  runForever()

@@ -1,10 +1,3 @@
-## octoque client lib
-
-working in progress...
-
-### quick example
-
-```nim
 import octoque_client, asyncdispatch
 import random, os
 
@@ -28,6 +21,8 @@ proc main() {.async.} =
     echo "put new message..."
     await otqclient.put("pubsub", 1, @[rndStr()])
 
+
+
 when isMainModule:
   asyncCheck main()
-```
+  runForever()
