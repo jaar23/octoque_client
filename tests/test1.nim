@@ -10,9 +10,7 @@ from net import Port
 import octoque_client
 import asyncdispatch, os
 
-var client = newOtqClient("localhost", Port(6789), OTQ, BROKER)
-let isConnected = client.connect("yj", "password").waitFor()
-echo "is connected? " & $isConnected
+var client = newOtqClient("localhost", Port(6789), "admin", "password")
 
 test "put 1 message":
   var data = ""
@@ -40,22 +38,16 @@ test "publish message":
   #sleep(1000)
 
 proc testSubscribeAsync(): Future[void] {.async.} =
-  var client2 = newOtqClient("localhost", Port(6789), OTQ, PUBSUB)
-  let iscon = client2.connect("yj", "password").waitFor()
-  proc sub(topic: string, data: string)  =
-    #echo "inside callback"
-    client2.put("default", 1, @[data]).waitFor()
+  await client.put("default", 1, @["hello world"])
+  proc sub(topic: string, data: string): void =
     echo ">>>>>" & data
-    echo "unsubsribed"
-    discard withTimeout(client2.unsubscribe("pubsub"), 2000).waitFor()
-    echo "called unsub"
-  client2.subscribe("pubsub", sub).await
-  client2.disconnect().waitFor()
-  
+  client.subscribe("pubsub", sub).await
+  echo "unsubsribed"
+  echo "called unsub"
+  let iscall = await withTimeout(client.unsubscribe("pubsub"), 2000)
+  return
 
-#   client2.subscribe("pubsub", sub).waitFor() 
-#waitFor client2.disconnect()
 
 test "subscribe message":
-  testSubscribeAsync().waitFor()
-  waitFor client.disconnect()
+  asyncCheck testSubscribeAsync()
+  client.disconnectFrom("pubsub").waitFor()

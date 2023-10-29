@@ -187,6 +187,21 @@ proc disconnect*(client: ref OtqClient, otqconn: ref OtqConnection): Future[
   client.connections.delete(pos)
 
 
+proc disconnectFrom*(client: ref OtqClient, topic: string): Future[
+    void] {.async.} =
+  var otqconn: ref OtqConnection
+  for conn in client.connections:
+    if conn.subscribeTo == topic:
+      otqconn = conn
+      break
+  let otqcommand = &"{client.protocol} {DISCONNECT}{NL}"
+  if otqconn != nil:
+    await otqconn.connection.send(otqcommand)
+    #echo "disconnect"
+    let pos = client.connections.find(otqconn)
+    client.connections.delete(pos)
+
+
 proc put*(client: ref OtqClient, topic: string, payloadRows: uint8,
           data: seq[string], transferMethod: TransferMethod = BATCH,
           sentAck = false): Future[void] {.async.} =
